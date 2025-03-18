@@ -12,5 +12,12 @@ Bagian ini gimana cara ngehubuungin antara database dan frontendnya. Jadi ini se
 Bagian ini lebih untuk membuat gudang/storing data sehingga bisa dapat diolah dan ditampilkan pada dashboard kita
 
 
+# _Draft Network_
+Pada network nanti kurang lebih alurnya seperti pada blok diagram berikut:
+
+![Topologi](https://github.com/user-attachments/assets/4b5e0089-8049-4669-97ea-c39919bd6547)
+
+Raspi akan upload data sensor dengan protokol mqtt yang bakal store di database laragon untuk nyimpen data sensor tadi. Setelah disimpan, data tadi bakal difetch pakai HTTP buat dashboardnya ambil data. 
+* P.S: Databse ini bisa dibicarain lebih lanjut ya laragon ini salah satu opsi karena dia lokal dan udah umum developmentnya
 # _Selamat Bekerja Semua_
 
