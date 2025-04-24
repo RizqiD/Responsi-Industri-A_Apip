@@ -1,0 +1,45 @@
+import RPi.GPIO as GPIO
+import time
+
+# Konfigurasi GPIO
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(18, GPIO.OUT)
+
+# Inisialisasi PWM pada pin 18 dengan frekuensi 50Hz
+pwm = GPIO.PWM(18, 50)
+pwm.start(0)
+
+# Fungsi untuk mengonversi sudut ke duty cycle PWM
+def set_angle(angle):
+    duty = 2 + (angle / 180) * 10  # Konversi sudut ke duty cycle (2-12)
+    pwm.ChangeDutyCycle(duty)
+    time.sleep(1)  # Tunggu servo bergerak
+
+try:
+    while True:
+        waktu_awal = time.monotonic()  
+        total_sudut = 0  
+
+        # Gerakan maju (0° ke 180° dengan step 15°)
+        for angle in range(0, 181, 90):       
+            set_angle(angle)
+            total_sudut += 90
+        
+        # Gerakan mundur (180° ke 0° dengan step 15°)
+        for angle in range(180, -1, -90):     
+            set_angle(angle)
+            total_sudut += 90  
+
+        waktu_akhir = time.monotonic()  
+        waktu_total = waktu_akhir - waktu_awal  
+
+        # Hitung RPM dengan rumus yang benar
+        rpm = (total_sudut / 360) * (60 / waktu_total)
+        
+        # Cetak hasil RPM
+        print(f"Kecepatan Rotasi: {rpm:.2f} RPM")
+
+except KeyboardInterrupt:
+    print("\nProgram dihentikan oleh pengguna.")
+    pwm.stop()
+    GPIO.cleanup()  # Bersihkan konfigurasi GPIO
