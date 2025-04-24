@@ -1,0 +1,75 @@
+import smbus
+import time
+import csv
+import os
+
+
+# Definisi alamat I2C dari BH1750
+BH1750_ADDRESS = 0x23  # Alamat default BH1750
+BH1750_POWER_ON = 0x01  # Perintah Power ON
+BH1750_RESET = 0x07  # Perintah Reset
+BH1750_CONTINUOUS_HIGH_RES_MODE = 0x10  # Mode resolusi tinggi
+
+# Inisialisasi bus I2C
+bus = smbus.SMBus(1)  # Gunakan I2C bus 1 di Raspberry Pi
+
+CSV_FILE = "bh1750_data.csv"
+
+def bh1750_init():
+    """Inisialisasi BH1750."""
+    time.sleep(0.1)
+    bus.write_byte(BH1750_ADDRESS, BH1750_POWER_ON)
+    bus.write_byte(BH1750_ADDRESS, BH1750_RESET)
+    bus.write_byte(BH1750_ADDRESS, BH1750_CONTINUOUS_HIGH_RES_MODE)
+    
+def read_bh1750():
+    """Membaca data cahaya dari sensor BH1750."""
+    data = bus.read_i2c_block_data(BH1750_ADDRESS, BH1750_CONTINUOUS_HIGH_RES_MODE, 2)
+    lux = (data[0] << 8) + data[1]
+    lux = lux / 1.2  # Mengonversi sesuai faktor kalibrasi sensor
+    return lux
+
+def initialize_csv():
+    """Membuat file CSV dengan header jika belum ada."""
+    if not os.path.exists(CSV_FILE):
+        with open(CSV_FILE, mode='w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(["Timestamp", "Lux"])
+
+def save_to_csv(lux):
+    """Menyimpan data ke file CSV."""
+    with open(CSV_FILE, mode='a', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow([time.strftime("%Y-%m-%d %H:%M:%S"), lux])
+
+def read_csv():
+    """Membaca dan menampilkan isi file CSV."""
+    if os.path.exists(CSV_FILE):
+        with open(CSV_FILE, mode='r') as file:
+            reader = csv.reader(file)
+            for row in reader:
+                print(row)
+    else:
+        print("File CSV belum tersedia.")
+
+def auto_logging():
+    """Membaca sensor BH1750 dan menyimpan data secara otomatis ke CSV."""
+    initialize_csv()
+    bh1750_init()
+    print("Mulai logging otomatis dari sensor BH1750...")
+    while True:
+        try:
+            lux = read_bh1750()
+            print(f"Intensitas cahaya: {lux:.2f} lux")
+            save_to_csv(lux)
+            time.sleep(1)
+        except KeyboardInterrupt:
+            print("\nLogging otomatis dihentikan oleh pengguna.")
+            break
+
+def main():
+    """Menjalankan program logging otomatis."""
+    auto_logging()
+
+if __name__ == "__main__":
+    main()
