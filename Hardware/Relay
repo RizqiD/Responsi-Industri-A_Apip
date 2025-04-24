@@ -1,0 +1,15 @@
+import RPi.GPIO as GPIO
+import time
+
+pinRelay = 21
+
+GPIO.setmode(GPIO.BCM)
+GPIO.setwarnings(False)
+GPIO.setup(pinRelay, GPIO.OUT,initial=GPIO.LOW)
+print("LED on")
+GPIO.output(pinRelay,GPIO.HIGH)
+time.sleep(4)
+print("LED off")
+GPIO.output(pinRelay,GPIO.LOW)
+time.sleep(4)
+GPIO.cleanup()
