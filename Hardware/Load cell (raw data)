@@ -1,0 +1,301 @@
+import RPi.GPIO as GPIO
+import time
+import sys
+import statistics
+import csv
+from datetime import datetime
+
+# Import the HX711 class
+try:
+    from hx711 import HX711
+except ImportError:
+    print("Error: HX711 module not found.")
+    print("Make sure the hx711.py file is in the same directory.")
+    sys.exit(1)
+
+# Configuration
+DOUT_PIN = 5  # GPIO pin for DOUT
+SCK_PIN = 6   # GPIO pin for SCK
+READINGS = 20  # Number of readings to take for average
+DELAY = 0.1    # Delay between readings in seconds
+
+def clean_and_exit():
+    """Clean up GPIO and exit the program"""
+    print("\nCleaning up GPIO...")
+    GPIO.cleanup()
+    print("Exiting program.")
+    sys.exit(0)
+
+def get_timestamp():
+    """Get current timestamp in readable format"""
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+def read_raw_values(hx, readings=20, delay=0.1, show_progress=True):
+    """Read multiple raw values and return statistical data"""
+    values = []
+    
+    if show_progress:
+        print(f"\nCollecting {readings} raw values...")
+    
+    try:
+        for i in range(readings):
+            if show_progress:
+                progress = int((i / readings) * 20)
+                sys.stdout.write('\r')
+                sys.stdout.write("[%-20s] %d%%" % ('='*progress, 5*progress))
+                sys.stdout.flush()
+            
+            # Read raw value
+            value = hx.read_long()
+            values.append(value)
+            
+            # Power cycle between readings for stability
+            hx.power_down()
+            time.sleep(delay)
+            hx.power_up()
+        
+        if show_progress:
+            sys.stdout.write('\r')
+            sys.stdout.write("[%-20s] %d%%\n" % ('='*20, 100))
+            sys.stdout.flush()
+    
+    except Exception as e:
+        print(f"\nError during reading: {e}")
+        return None
+    
+    # Return values if we have any
+    return values if values else None
+
+def analyze_values(values):
+    """Analyze a list of values and return statistics"""
+    if not values or len(values) == 0:
+        return None
+    
+    stats = {
+        "count": len(values),
+        "min": min(values),
+        "max": max(values),
+        "range": max(values) - min(values),
+        "mean": statistics.mean(values),
+        "median": statistics.median(values)
+    }
+    
+    # Calculate standard deviation if we have enough values
+    if len(values) > 1:
+        stats["std_dev"] = statistics.stdev(values)
+        stats["variance"] = statistics.variance(values)
+    
+    return stats
+
+def save_to_csv(values, filename=None):
+    """Save raw values to a CSV file"""
+    if not filename:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"hx711_raw_values_{timestamp}.csv"
+    
+    try:
+        with open(filename, 'w', newline='') as csvfile:
+            csvwriter = csv.writer(csvfile)
+            csvwriter.writerow(['Reading #', 'Raw Value'])
+            
+            for i, value in enumerate(values, 1):
+                csvwriter.writerow([i, value])
+        
+        print(f"\nRaw values saved to {filename}")
+        return True
+    except Exception as e:
+        print(f"\nError saving to CSV: {e}")
+        return False
+
+def continuous_reading(hx, delay=0.5):
+    """Continuously read and display raw values until interrupted"""
+    print("\nContinuous raw value reading mode.")
+    print("Press Ctrl+C to stop and return to menu.")
+    
+    try:
+        print("\nTimestamp            | Raw Value")
+        print("-" * 40)
+        
+        while True:
+            raw_value = hx.read_long()
+            timestamp = get_timestamp()
+            print(f"{timestamp} | {raw_value}")
+            
+            hx.power_down()
+            time.sleep(delay)
+            hx.power_up()
+    
+    except KeyboardInterrupt:
+        print("\nContinuous reading stopped.")
+
+def print_statistics(stats):
+    """Print statistics in a formatted way"""
+    print("\n=== Raw Value Statistics ===")
+    print(f"Number of readings: {stats['count']}")
+    print(f"Minimum value: {stats['min']}")
+    print(f"Maximum value: {stats['max']}")
+    print(f"Range: {stats['range']}")
+    print(f"Mean: {stats['mean']:.2f}")
+    print(f"Median: {stats['median']:.2f}")
+    
+    if 'std_dev' in stats:
+        print(f"Standard deviation: {stats['std_dev']:.2f}")
+        print(f"Variance: {stats['variance']:.2f}")
+    
+    # Print stability assessment
+    stability = (stats['range'] / abs(stats['mean'])) * 100 if stats['mean'] != 0 else float('inf')
+    
+    print("\nStability assessment:")
+    if stability < 1:
+        print("Excellent stability (< 1% variation)")
+    elif stability < 5:
+        print("Good stability (< 5% variation)")
+    elif stability < 10:
+        print("Fair stability (< 10% variation)")
+    else:
+        print(f"Poor stability ({stability:.2f}% variation)")
+
+def initialize_hx711(dout_pin, sck_pin):
+    """Initialize the HX711 sensor"""
+    try:
+        print("\nInitializing HX711...")
+        
+        # Initialize GPIO
+        GPIO.setwarnings(False)
+        GPIO.setmode(GPIO.BCM)
+        
+        # Initialize HX711
+        hx = HX711(dout_pin, sck_pin)
+        hx.set_reading_format("MSB", "MSB")
+        hx.reset()
+        
+        print("HX711 initialized successfully.")
+        return hx
+    
+    except Exception as e:
+        print(f"Error initializing HX711: {e}")
+        print("Check your connections and try again.")
+        return None
+
+def check_connection(hx):
+    """Check if HX711 is properly connected"""
+    print("\nChecking HX711 connection...")
+    
+    try:
+        # Try to read a value
+        value = hx.read_long()
+        print(f"Connection test: Received value {value}")
+        
+        # Check if the sensor responds to reset
+        print("Testing reset functionality...")
+        hx.reset()
+        
+        print("HX711 is connected and responding properly.")
+        return True
+    
+    except Exception as e:
+        print(f"Connection test failed: {e}")
+        print("Please check your wiring and try again.")
+        return False
+
+def main_menu():
+    """Display the main menu and get user choice"""
+    print("\n=== HX711 Raw Value Reader ===")
+    print("1. Read single raw value")
+    print("2. Read multiple raw values and show statistics")
+    print("3. Continuous raw value reading")
+    print("4. Save raw values to CSV")
+    print("5. Check HX711 connection")
+    print("6. Change pin configuration")
+    print("7. Exit")
+    
+    choice = input("\nEnter your choice (1-7): ")
+    return choice
+
+def main():
+    """Main function"""
+    print("HX711 Raw Value Reader")
+    print("=====================")
+    print("This program reads raw values from HX711 load cell amplifier.")
+    print("Useful for testing and calibration purposes.")
+    
+    # Get pin configuration
+    dout_pin = int(input("Enter DOUT pin (default: 5): ") or "5")
+    sck_pin = int(input("Enter SCK pin (default: 6): ") or "6")
+    
+    # Initialize HX711
+    hx = initialize_hx711(dout_pin, sck_pin)
+    if not hx:
+        print("Failed to initialize HX711. Exiting...")
+        sys.exit(1)
+    
+    # Check connection
+    if not check_connection(hx):
+        retry = input("Connection check failed. Retry? (y/n): ")
+        if retry.lower() != 'y':
+            clean_and_exit()
+    
+    while True:
+        choice = main_menu()
+        
+        if choice == '1':
+            # Read single raw value
+            print("\nReading raw value...")
+            raw_value = hx.read_long()
+            print(f"Raw value: {raw_value}")
+        
+        elif choice == '2':
+            # Read multiple raw values and show statistics
+            readings = int(input("Enter number of readings (default: 20): ") or "20")
+            delay = float(input("Enter delay between readings in seconds (default: 0.1): ") or "0.1")
+            
+            values = read_raw_values(hx, readings, delay)
+            if values:
+                stats = analyze_values(values)
+                print_statistics(stats)
+        
+        elif choice == '3':
+            # Continuous raw value reading
+            delay = float(input("Enter refresh rate in seconds (default: 0.5): ") or "0.5")
+            continuous_reading(hx, delay)
+        
+        elif choice == '4':
+            # Save raw values to CSV
+            readings = int(input("Enter number of readings to save (default: 100): ") or "100")
+            delay = float(input("Enter delay between readings in seconds (default: 0.1): ") or "0.1")
+            
+            values = read_raw_values(hx, readings, delay)
+            if values:
+                filename = input("Enter filename (leave blank for auto-generated): ")
+                save_to_csv(values, filename if filename else None)
+        
+        elif choice == '5':
+            # Check HX711 connection
+            check_connection(hx)
+        
+        elif choice == '6':
+            # Change pin configuration
+            dout_pin = int(input("Enter new DOUT pin: "))
+            sck_pin = int(input("Enter new SCK pin: "))
+            
+            # Clean up old GPIO settings
+            GPIO.cleanup()
+            
+            # Initialize with new pins
+            hx = initialize_hx711(dout_pin, sck_pin)
+            if not hx:
+                print("Failed to initialize HX711 with new pins. Exiting...")
+                sys.exit(1)
+        
+        elif choice == '7':
+            # Exit
+            clean_and_exit()
+        
+        else:
+            print("Invalid choice. Please enter a number between 1 and 7.")
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        clean_and_exit()
