@@ -1,0 +1,80 @@
+import time
+import sys
+import csv
+from datetime import datetime
+from hx711 import HX711
+
+def clean_and_exit():
+    print("Cleaning up...")
+    sys.exit()
+
+def setup_csv_file():
+    # Buat nama file berdasarkan timestamp
+    filename = f"loadcell_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    
+    # Buat header CSV
+    header = ["Timestamp", "Weight (g)"]
+    
+    # Buat file dan tulis header
+    with open(filename, mode='w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(header)
+    
+    return filename
+
+def save_to_csv(filename, timestamp, weight):
+    with open(filename, mode='a', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow([timestamp, weight])
+
+def main():
+    # Setup file CSV
+    csv_filename = setup_csv_file()
+    print(f"Data akan disimpan ke: {csv_filename}")
+    
+    # Inisialisasi HX711
+    hx = HX711(dout=5, pd_sck=6)
+    
+    # Kalibrasi
+    try:
+        # Tentukan reference unit (1 gram)
+        # Anda perlu menyesuaikan ini berdasarkan kalibrasi aktual
+        reference_unit = -217.7
+        
+        hx.set_reading_format("MSB", "MSB")
+        hx.set_reference_unit(reference_unit)
+        
+        # Reset dan tara
+        hx.reset()
+        hx.tare()
+        
+        print("Tara disetel. Mulai membaca berat...")
+        print("Tekan Ctrl+C untuk keluar")
+        
+        while True:
+            try:
+                # Dapatkan timestamp saat ini
+                current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+                
+                # Dapatkan berat dalam gram
+                val = hx.get_weight(5)
+                print(f"Berat: {val:.2f} gram")
+                
+                # Simpan ke CSV
+                save_to_csv(csv_filename, current_time, val)
+                
+                hx.power_down()
+                hx.power_up()
+                time.sleep(0.1)
+                
+            except (KeyboardInterrupt, SystemExit):
+                clean_and_exit()
+                
+    except (KeyboardInterrupt, SystemExit):
+        clean_and_exit()
+    except Exception as e:
+        print(f"Error: {e}")
+        clean_and_exit()
+
+if __name__ == "__main__":
+    main()
